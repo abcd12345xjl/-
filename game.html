@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原函数配对迷宫 · 森林探险</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI','Poppins',system-ui,sans-serif; }
+
+    body {
+        background:#0a2a1e;
+        display:flex; justify-content:center; align-items:center;
+        min-height:100vh; padding:12px;
+    }
+
+    .game-container {
+        width:1200px; max-width:100%;
+        background:radial-gradient(circle at 20% 30%, #1b4e2b, #0d2b1a 80%);
+        border-radius:40px;
+        box-shadow:0 25px 40px rgba(0,0,0,0.7), inset 0 0 30px #2f6a3f;
+        border:2px solid #3b6e4b;
+        padding:18px 22px 22px;
+        position:relative; overflow:hidden;
+    }
+    .game-container::before {
+        content:""; position:absolute; inset:0;
+        background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" opacity="0.07"><path d="M40 160 Q 60 100 100 80 Q 140 60 160 20" stroke="%23b1e6c9" fill="none" stroke-width="6"/><circle cx="180" cy="30" r="15" fill="%23a6d9b0"/><circle cx="30" cy="40" r="25" fill="%235a9e72"/></svg>');
+        background-repeat:repeat; pointer-events:none; mix-blend-mode:overlay;
+    }
+
+    .top-bar {
+        display:flex; justify-content:space-between; align-items:center;
+        margin-bottom:12px; position:relative; z-index:3; flex-wrap:wrap; gap:10px;
+    }
+    .level-badge {
+        background:#2e5d3b; border:2px solid #98c9a6;
+        padding:8px 22px; border-radius:100px; color:#e4f5e9;
+        font-weight:600; box-shadow:0 5px 0 #0b1f12; font-size:1.05rem;
+    }
+
+    .level-selector { display:flex; justify-content:center; gap:14px; margin-bottom:12px; }
+    .level-dot {
+        width:46px; height:46px; border-radius:50%;
+        background:#2e5738; border:3px solid #98c9a6;
+        color:#e1f0dd; font-size:1.35rem; font-weight:bold;
+        display:flex; align-items:center; justify-content:center;
+        cursor:pointer; box-shadow:0 5px 0 #18341d; transition:0.1s;
+    }
+    .level-dot.active {
+        background:#e2c24b; border-color:#ffffc2; color:#1e3a1e;
+        box-shadow:0 0 18px #f9e57e, 0 5px 0 #7e6a1b; transform:scale(1.05);
+    }
+    .level-dot.completed {
+        background:#4e9e5c; border-color:#d2f0b0; color:#fff;
+        box-shadow:0 0 12px #a5e6a5, 0 5px 0 #25612f;
+    }
+
+    .main-layout {
+        display:flex; gap:16px; align-items:stretch;
+        position:relative; z-index:2;
+    }
+
+    .maze-panel {
+        flex:0 0 auto;
+        background:#112b17;
+        border:5px solid #437a53;
+        border-radius:24px;
+        padding:12px;
+        box-shadow:inset 0 0 25px #0b1f10, 0 8px 18px black;
+        display:flex; flex-direction:column; align-items:center;
+    }
+
+    .maze-grid {
+        display:grid;
+        gap:2px;
+        background:#0b1c10;
+        padding:4px;
+        border-radius:8px;
+        margin-bottom:10px;
+    }
+
+    .cell {
+        display:flex; align-items:center; justify-content:center;
+        font-size:1.4rem; position:relative; transition:background 0.15s;
+        border-radius:3px;
+    }
+    .cell.wall {
+        background:#1d3a24;
+        background-image:linear-gradient(45deg, #244d2c 25%, #1a3a20 25%, #1a3a20 50%, #244d2c 50%, #244d2c 75%, #1a3a20 75%);
+        background-size:10px 10px;
+    }
+    .cell.path {
+        background:#254a2c;
+        box-shadow:inset 0 0 6px #3c7046;
+    }
+    .cell.visited {
+        background:#3d7a48;
+        box-shadow:inset 0 0 8px #8fce9a;
+    }
+    .cell.player {
+        background:#5da06b;
+        box-shadow:0 0 16px #f9e57e, inset 0 0 8px #fef9c0;
+        border-radius:6px; z-index:2;
+    }
+    .cell.exit {
+        background:#4a6b2d;
+        box-shadow:0 0 14px #e3c84b, inset 0 0 8px #f5e180;
+        border-radius:6px;
+    }
+    .cell.exit::after { content:"🏁"; font-size:1.5rem; }
+    .cell.player.exit::after { content:"🏆"; font-size:1.5rem; }
+
+    .cell.junction::before {
+        content:"❓"; position:absolute;
+        font-size:0.85rem; top:-2px; right:-2px;
+        filter:drop-shadow(0 0 3px #ffd966);
+    }
+    .cell.junction.answered::before { content:"✅"; }
+
+    .cell.player .walker { animation:bounce 0.6s infinite alternate; }
+    @keyframes bounce { from { transform:translateY(0); } to { transform:translateY(-4px); } }
+
+    .dir-controls {
+        display:flex; flex-direction:column; align-items:center; gap:2px;
+        margin-top:6px;
+    }
+    .dir-row { display:flex; gap:2px; }
+    .dir-btn {
+        width:46px; height:46px; font-size:1.4rem;
+        border-radius:10px; border:2px solid #98c9a6;
+        background:#2e5738; color:#fff; cursor:pointer;
+        box-shadow:0 3px 0 #18341d; transition:0.1s;
+    }
+    .dir-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #18341d; }
+    .dir-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
+    .quiz-panel {
+        flex:1;
+        background:#153520;
+        border:4px solid #4f8a5c;
+        border-radius:28px;
+        padding:16px 18px;
+        box-shadow:inset 0 0 22px #0f2615, 0 8px 18px black;
+        min-width:0; display:flex; flex-direction:column;
+    }
+
+    .quiz-header {
+        display:flex; justify-content:space-between; align-items:center;
+        margin-bottom:12px;
+    }
+    .quiz-title {
+        color:#c2e5b6; font-size:0.95rem; font-weight:600; letter-spacing:0.5px;
+    }
+    .quiz-step {
+        background:#2d5434; color:#d4f0c9;
+        padding:4px 14px; border-radius:30px; font-size:0.85rem;
+        border:1px solid #6fa177; font-weight:600;
+    }
+
+    .question-box {
+        background:#1e3f28;
+        border:3px solid #7ba982;
+        border-radius:20px;
+        padding:14px 18px; margin-bottom:14px;
+        box-shadow:inset 0 0 14px #2b5433;
+    }
+    .question-func {
+        font-size:1.6rem; font-weight:700;
+        font-family:'Courier New',monospace;
+        color:#f2ffe6; text-shadow:0 2px 0 #1d3a1d;
+        letter-spacing:1px; text-align:center; margin-bottom:4px;
+    }
+    .question-hint {
+        text-align:center; color:#a8d4a8; font-size:0.85rem;
+    }
+
+    .options-list {
+        display:flex; flex-direction:column; gap:10px; flex:1;
+    }
+
+    .option-btn {
+        background:#2d6b3b; border:2px solid #aad6b2;
+        color:#f0fdea; font-size:1.15rem; font-weight:600;
+        font-family:'Courier New',monospace;
+        padding:11px 18px; border-radius:40px; cursor:pointer;
+        transition:0.15s; box-shadow:0 5px 0 #183f1f, 0 0 8px #5ba16b;
+        text-align:center; letter-spacing:1px;
+    }
+    .option-btn:hover:not(:disabled) {
+        background:#3c864b; transform:scale(1.01);
+        box-shadow:0 5px 0 #1e5529, 0 0 14px #8adb9b;
+    }
+    .option-btn:active:not(:disabled) {
+        transform:translateY(3px); box-shadow:0 2px 0 #183f1f;
+    }
+    .option-btn:disabled { opacity:0.4; cursor:not-allowed; box-shadow:0 5px 0 #1b2e1b; }
+    .option-btn.wrong-selected {
+        background:#6d2e2e; border-color:#d47b7b;
+        box-shadow:0 5px 0 #3a1212, 0 0 12px #b33e3e;
+    }
+
+    .quiz-footer {
+        margin-top:12px; text-align:center;
+        color:#a8d4a8; font-size:0.85rem; font-style:italic;
+    }
+
+    .explanation-panel {
+        background:#172e1b; border:3px solid #dbb15b;
+        border-radius:22px; padding:12px 16px; margin-top:12px;
+        color:#ffefc0;
+        box-shadow:0 0 20px #b8862f, inset 0 0 18px #4b681d;
+        display:none;
+    }
+    .explanation-panel.show { display:block; animation:glowIn 0.3s ease; }
+    @keyframes glowIn { 0%{opacity:0; transform:translateY(6px);} 100%{opacity:1; transform:translateY(0);} }
+    .explanation-title {
+        font-size:1.05rem; font-weight:700; margin-bottom:6px; color:#f7e07a;
+    }
+    .explanation-content {
+        font-size:0.95rem; line-height:1.5; color:#e2efce;
+        font-family:'Courier New',monospace; margin-bottom:8px;
+        padding-left:8px; border-left:4px solid #c9a144;
+    }
+    .close-explanation {
+        background:#4d6b2e; border:2px solid #ddc067; color:#fff;
+        font-weight:bold; padding:5px 18px; border-radius:30px;
+        cursor:pointer; font-size:0.85rem;
+        box-shadow:0 3px 0 #283d0e; float:right;
+    }
+    .close-explanation:active { transform:translateY(2px); box-shadow:0 1px 0 #283d0e; }
+
+    .footer-buttons {
+        display:flex; justify-content:center; gap:16px;
+        margin-top:16px; position:relative; z-index:3;
+    }
+    .reset-btn, .next-btn {
+        background:#316e3f; border:3px solid #b1daa7; color:#edffe7;
+        font-weight:700; font-size:1.05rem; padding:9px 28px;
+        border-radius:60px; cursor:pointer;
+        box-shadow:0 6px 0 #12381b, 0 0 16px #478a58;
+        letter-spacing:1px; transition:0.1s;
+    }
+    .reset-btn:active, .next-btn:active {
+        transform:translateY(4px); box-shadow:0 2px 0 #12381b;
+    }
+    .next-btn:disabled {
+        opacity:0.4; transform:translateY(3px);
+        box-shadow:0 3px 0 #12381b; cursor:not-allowed;
+    }
+
+    .hint-text {
+        text-align:center; color:#b9daaf; font-size:0.82rem;
+        margin-top:10px; opacity:0.9; font-style:italic;
+    }
+
+    .legend {
+        display:flex; gap:14px; justify-content:center;
+        margin-top:6px; font-size:0.75rem; color:#b0d8b0; flex-wrap:wrap;
+    }
+    .legend span { display:inline-flex; align-items:center; gap:4px; }
+    .legend .sw { width:13px; height:13px; border-radius:3px; display:inline-block; }
+    .sw.path-sw { background:#254a2c; }
+    .sw.visited-sw { background:#3d7a48; }
+    .sw.wall-sw { background:#1d3a24; }
+    .sw.exit-sw { background:#4a6b2d; }
+    .sw.junction-sw { background:#254a2c; border:1px solid #ffd966; }
+
+    /* ========== 最终通关画面 ========== */
+    .final-overlay {
+        position:fixed; inset:0;
+        background:radial-gradient(circle at 50% 40%, #1a4a2a, #051a0e 90%);
+        z-index:1000;
+        display:none;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        animation:fadeIn 0.8s ease;
+    }
+    .final-overlay.show { display:flex; }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+    /* 礼炮容器 */
+    .fireworks-layer {
+        position:absolute; inset:0;
+        pointer-events:none;
+        overflow:hidden;
+    }
+    .firework-particle {
+        position:absolute;
+        width:10px; height:10px;
+        border-radius:50%;
+        pointer-events:none;
+        animation:burst 1.5s ease-out forwards;
+    }
+    @keyframes burst {
+        0% { transform:translate(0,0) scale(1); opacity:1; }
+        100% { transform:translate(var(--dx), var(--dy)) scale(0); opacity:0; }
+    }
+
+    .final-content {
+        position:relative;
+        z-index:2;
+        text-align:center;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+    }
+
+    .trophy-holder {
+        font-size:9rem;
+        filter:drop-shadow(0 0 30px #ffd966);
+        animation:trophyFloat 2s infinite ease-in-out;
+    }
+    @keyframes trophyFloat {
+        0%,100% { transform:translateY(0) scale(1); }
+        50% { transform:translateY(-18px) scale(1.05); }
+    }
+
+    .final-title {
+        font-size:3.2rem;
+        font-weight:900;
+        color:#ffe98a;
+        text-shadow:0 0 30px #ffb84d, 0 6px 0 #7a5c10;
+        letter-spacing:4px;
+        margin:10px 0 6px;
+        animation:titlePop 1s ease;
+    }
+    @keyframes titlePop { 0% { transform:scale(0.5); opacity:0; } 100% { transform:scale(1); opacity:1; } }
+
+    .final-subtitle {
+        font-size:1.3rem;
+        color:#d4f0c9;
+        letter-spacing:2px;
+        margin-bottom:20px;
+    }
+
+    .final-restart-btn {
+        background:#ffd966;
+        border:4px solid #ffb84d;
+        color:#3a2a00;
+        font-weight:800;
+        font-size:1.3rem;
+        padding:14px 44px;
+        border-radius:60px;
+        cursor:pointer;
+        box-shadow:0 8px 0 #a67c00, 0 0 30px #ffd966;
+        letter-spacing:2px;
+        transition:0.1s;
+    }
+    .final-restart-btn:active {
+        transform:translateY(5px);
+        box-shadow:0 3px 0 #a67c00;
+    }
+
+    .final-crown {
+        font-size:2rem;
+        margin-bottom:-8px;
+        animation:crownSpin 3s infinite linear;
+    }
+    @keyframes crownSpin { 0%{transform:rotate(-8deg);} 50%{transform:rotate(8deg);} 100%{transform:rotate(-8deg);} }
+</style>
+</head>
+<body>
+<div class="game-container">
+    <div class="level-selector" id="levelSelector"></div>
+
+    <div class="top-bar">
+        <div class="level-badge" id="levelBadge">🌲 关卡 1 · 林间小径</div>
+    </div>
+
+    <div class="main-layout">
+        <div class="maze-panel">
+            <div class="maze-grid" id="mazeGrid"></div>
+            <div class="dir-controls">
+                <div class="dir-row">
+                    <button class="dir-btn" id="upBtn">⬆️</button>
+                </div>
+                <div class="dir-row">
+                    <button class="dir-btn" id="leftBtn">⬅️</button>
+                    <button class="dir-btn" id="downBtn">⬇️</button>
+                    <button class="dir-btn" id="rightBtn">➡️</button>
+                </div>
+            </div>
+            <div class="legend">
+                <span><span class="sw path-sw"></span>路径</span>
+                <span><span class="sw visited-sw"></span>走过</span>
+                <span><span class="sw wall-sw"></span>墙壁</span>
+                <span><span class="sw exit-sw"></span>出口</span>
+                <span><span class="sw junction-sw"></span>岔路口</span>
+            </div>
+        </div>
+
+        <div class="quiz-panel">
+            <div class="quiz-header">
+                <div class="quiz-title">🌿 岔路口 · 求原函数</div>
+                <div class="quiz-step" id="quizStep">等待进入岔路口</div>
+            </div>
+
+            <div class="question-box">
+                <div class="question-func" id="questionFunc">🧭 探索中...</div>
+                <div class="question-hint" id="questionHint">使用下方方向键移动小人</div>
+            </div>
+
+            <div class="options-list" id="optionsList"></div>
+
+            <div class="explanation-panel" id="explanationPanel">
+                <div class="explanation-title">❌ 死胡同 · 错题解析</div>
+                <div class="explanation-content" id="explanationContent"></div>
+                <button class="close-explanation" id="closeExplanationBtn">继续探索 🌿</button>
+            </div>
+
+            <div class="quiz-footer" id="quizFooter">答对后小人才能离开岔路口，答错会进入死胡同并弹出解析</div>
+        </div>
+    </div>
+
+    <div class="footer-buttons">
+        <button class="reset-btn" id="resetLevelBtn">🔄 重走迷宫</button>
+        <button class="next-btn" id="nextLevelBtn" disabled>➡️ 下一关</button>
+    </div>
+    <div class="hint-text">森林迷宫：走到岔路口❓自动出题，答对才能通过；走到终点🏁即可开启下一关</div>
+</div>
+
+<!-- 最终通关画面 -->
+<div class="final-overlay" id="finalOverlay">
+    <div class="fireworks-layer" id="fireworksLayer"></div>
+    <div class="final-content">
+        <div class="final-crown">👑</div>
+        <div class="trophy-holder" id="trophyHolder">🧑‍🌾</div>
+        <div class="final-title">通关成功！</div>
+        <div class="final-subtitle">🎉 恭喜你走出所有森林迷宫 🎉</div>
+        <button class="final-restart-btn" id="finalRestartBtn">🏆 再玩一次</button>
+    </div>
+</div>
+
+<script>
+(function(){
+    // ============================================================
+    // 1. 关卡数据
+    // ============================================================
+    const levels = [
+        {
+            name: "林间小径",
+            map: [
+                "S...#....",
+                ".#..#.#..",
+                ".#....#..",
+                ".####.#..",
+                "....#.#..",
+                "###.#.#..",
+                "#...#.#..",
+                "#.###.#E.",
+                "#.....#.."
+            ],
+            questions: [
+                { deriv:"2x", correct:"x² + C", distractors:["2x² + C","x + C","x² + 2x + C"],
+                  explanation:"2x 的原函数是 x² + C。因为 (x²)' = 2x。x²+2x 导数为2x+2；2x²导数为4x；x导数为1。" },
+                { deriv:"3x²", correct:"x³ + C", distractors:["3x³ + C","x² + C","3x + C"],
+                  explanation:"3x² 的原函数是 x³ + C。因为 (x³)' = 3x²。3x³导数为9x²；x²导数为2x；3x导数为3。" },
+                { deriv:"cos(x)", correct:"sin(x) + C", distractors:["-sin(x) + C","cos(x) + C","-cos(x) + C"],
+                  explanation:"cos(x) 的原函数是 sin(x) + C。因为 (sin x)' = cos x。-sin x 导数为 -cos x；cos x 导数为 -sin x；-cos x 导数为 sin x。" },
+                { deriv:"eˣ", correct:"eˣ + C", distractors:["x eˣ + C","eˣ / x + C","ln(x) + C"],
+                  explanation:"eˣ 的原函数是 eˣ + C。x eˣ 导数为 eˣ + x eˣ；ln(x) 导数为 1/x。" },
+                { deriv:"-sin(x)", correct:"cos(x) + C", distractors:["-cos(x) + C","sin(x) + C","-sin(x) + C"],
+                  explanation:"-sin(x) 的原函数是 cos(x) + C。因为 (cos x)' = -sin x。-cos x导数为 sin x；sin x导数为 cos x。" },
+                { deriv:"sec²(x)", correct:"tan(x) + C", distractors:["cot(x) + C","sec(x) + C","csc(x) + C"],
+                  explanation:"sec²(x) 的原函数是 tan(x) + C。因为 (tan x)' = sec²x。" },
+                { deriv:"1/x", correct:"ln|x| + C", distractors:["1/x² + C","x + C","eˣ + C"],
+                  explanation:"1/x 的原函数是 ln|x| + C。" }
+            ]
+        },
+        {
+            name: "藤蔓岔路",
+            map: [
+                "S..#....",
+                ".#.#.##.",
+                ".#...#..",
+                ".#####.#",
+                ".....#.#",
+                "###.#.#.",
+                "#...#.#.",
+                "#.###.#.",
+                "#....E.#",
+                "#########"
+            ],
+            questions: [
+                { deriv:"-sin(x)", correct:"cos(x) + C", distractors:["-cos(x) + C","sin(x) + C","-sin(x) + C"],
+                  explanation:"-sin(x) 的原函数是 cos(x) + C。因为 (cos x)' = -sin x。" },
+                { deriv:"sec²(x)", correct:"tan(x) + C", distractors:["cot(x) + C","sec(x) + C","csc(x) + C"],
+                  explanation:"sec²(x) 的原函数是 tan(x) + C。因为 (tan x)' = sec²x。" },
+                { deriv:"1/x", correct:"ln|x| + C", distractors:["1/x² + C","x + C","eˣ + C"],
+                  explanation:"1/x 的原函数是 ln|x| + C。" },
+                { deriv:"4x³", correct:"x⁴ + C", distractors:["4x⁴ + C","x³ + C","12x² + C"],
+                  explanation:"4x³ 的原函数是 x⁴ + C。" },
+                { deriv:"sec(x)tan(x)", correct:"sec(x) + C", distractors:["tan(x) + C","csc(x) + C","sec²(x) + C"],
+                  explanation:"sec(x)tan(x) 的原函数是 sec(x) + C。" },
+                { deriv:"5x⁴", correct:"x⁵ + C", distractors:["5x⁵ + C","x⁴ + C","20x³ + C"],
+                  explanation:"5x⁴ 的原函数是 x⁵ + C。" }
+            ]
+        },
+        {
+            name: "古树秘境",
+            map: [
+                "S.#.....#",
+                ".##.###.#",
+                ".....#..#",
+                ".###.#.##",
+                ".#...#...",
+                ".#.###.#.",
+                "...#.#.#.",
+                "##.#.#.#.",
+                "#..#...#.",
+                "#.#####.#",
+                "#......E#",
+                "#########"
+            ],
+            questions: [
+                { deriv:"aˣ (a>0, a≠1)", correct:"aˣ / ln(a) + C", distractors:["aˣ + C","ln(a) aˣ + C","x aˣ + C"],
+                  explanation:"aˣ 的原函数是 aˣ / ln(a) + C。" },
+                { deriv:"sin(x)", correct:"-cos(x) + C", distractors:["cos(x) + C","-sin(x) + C","sin(x) + C"],
+                  explanation:"sin(x) 的原函数是 -cos(x) + C。" },
+                { deriv:"cos(x)", correct:"sin(x) + C", distractors:["-sin(x) + C","cos(x) + C","-cos(x) + C"],
+                  explanation:"cos(x) 的原函数是 sin(x) + C。" },
+                { deriv:"eˣ", correct:"eˣ + C", distractors:["x eˣ + C","eˣ / x + C","ln(x) + C"],
+                  explanation:"eˣ 的原函数是 eˣ + C。" },
+                { deriv:"2x", correct:"x² + C", distractors:["2x² + C","x + C","x² + 2x + C"],
+                  explanation:"2x 的原函数是 x² + C。" },
+                { deriv:"sec²(x)", correct:"tan(x) + C", distractors:["cot(x) + C","sec(x) + C","csc(x) + C"],
+                  explanation:"sec²(x) 的原函数是 tan(x) + C。" },
+                { deriv:"1/x", correct:"ln|x| + C", distractors:["1/x² + C","x + C","eˣ + C"],
+                  explanation:"1/x 的原函数是 ln|x| + C。" }
+            ]
+        }
+    ];
+
+    // ============================================================
+    // 2. 全局状态
+    // ============================================================
+    let currentLevelIndex = 0;
+    let levelCompleted = [false, false, false];
+    let gameLocked = false;
+    let playerPos = { r: 0, c: 0 };
+    let exitPos = { r: 0, c: 0 };
+    let visitedCells = new Set();
+    let currentMap = [];
+    let junctions = [];
+    let junctionQuestions = [];
+    let answeredJunctions = new Set();
+    let currentJunction = null;
+    let allLevelsFinished = false;   // 三关全部完成
+
+    // DOM
+    const levelSelector = document.getElementById('levelSelector');
+    const levelBadge = document.getElementById('levelBadge');
+    const mazeGrid = document.getElementById('mazeGrid');
+    const quizStep = document.getElementById('quizStep');
+    const questionFunc = document.getElementById('questionFunc');
+    const questionHint = document.getElementById('questionHint');
+    const optionsList = document.getElementById('optionsList');
+    const explanationPanel = document.getElementById('explanationPanel');
+    const explanationContent = document.getElementById('explanationContent');
+    const closeExplanationBtn = document.getElementById('closeExplanationBtn');
+    const resetLevelBtn = document.getElementById('resetLevelBtn');
+    const nextLevelBtn = document.getElementById('nextLevelBtn');
+    const quizFooter = document.getElementById('quizFooter');
+    const upBtn = document.getElementById('upBtn');
+    const downBtn = document.getElementById('downBtn');
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
+    const finalOverlay = document.getElementById('finalOverlay');
+    const fireworksLayer = document.getElementById('fireworksLayer');
+    const finalRestartBtn = document.getElementById('finalRestartBtn');
+
+    // ============================================================
+    // 3. 工具函数
+    // ============================================================
+    function shuffleArray(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function updateLevelSelector() {
+        levelSelector.querySelectorAll('.level-dot').forEach((dot, idx) => {
+            dot.classList.remove('active', 'completed');
+            if (idx === currentLevelIndex) dot.classList.add('active');
+            if (levelCompleted[idx]) dot.classList.add('completed');
+        });
+    }
+
+    function hideExplanation() { explanationPanel.classList.remove('show'); }
+    function showExplanation(text) {
+        explanationContent.textContent = text;
+        explanationPanel.classList.add('show');
+    }
+    function updateNextButton() {
+        nextLevelBtn.disabled = !(levelCompleted[currentLevelIndex] && currentLevelIndex < levels.length - 1);
+    }
+
+    function isWalkable(r, c) {
+        if (r < 0 || r >= currentMap.length) return false;
+        if (c < 0 || c >= currentMap[r].length) return false;
+        const ch = currentMap[r][c];
+        return ch === '.' || ch === 'S' || ch === 'E';
+    }
+
+    // ============================================================
+    // 4. 渲染迷宫
+    // ============================================================
+    function renderMaze() {
+        mazeGrid.innerHTML = '';
+        const rows = currentMap.length;
+        const cols = currentMap[0].length;
+        const cellSize = Math.min(44, Math.floor(560 / Math.max(rows, cols)));
+        mazeGrid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const ch = currentMap[r][c];
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.style.width = cellSize + 'px';
+                cell.style.height = cellSize + 'px';
+                cell.style.fontSize = Math.floor(cellSize * 0.55) + 'px';
+
+                const key = r + ',' + c;
+
+                if (ch === '#') {
+                    cell.classList.add('wall');
+                } else {
+                    cell.classList.add('path');
+                    if (visitedCells.has(key)) cell.classList.add('visited');
+                    if (r === exitPos.r && c === exitPos.c) cell.classList.add('exit');
+                    
+                    if (ch === '.') {
+                        cell.classList.add('junction');
+                        if (answeredJunctions.has(key)) cell.classList.add('answered');
+                    }
+
+                    if (r === playerPos.r && c === playerPos.c) {
+                        cell.classList.add('player');
+                        const walker = document.createElement('span');
+                        walker.className = 'walker';
+                        walker.textContent = '🧑‍🌾';
+                        cell.appendChild(walker);
+                    }
+                }
+                mazeGrid.appendChild(cell);
+            }
+        }
+    }
+
+    // ============================================================
+    // 5. 渲染题目面板
+    // ============================================================
+    function renderQuizPanel() {
+        if (isLevelCompleted()) {
+            questionFunc.textContent = '🎉 已抵达终点 🎉';
+            questionHint.textContent = '恭喜走出迷宫！';
+            quizStep.textContent = `完成`;
+            optionsList.innerHTML = '';
+            quizFooter.textContent = '点击“下一关”继续冒险，或重走迷宫再玩一次';
+            return;
+        }
+
+        const key = playerPos.r + ',' + playerPos.c;
+        const ch = currentMap[playerPos.r][playerPos.c];
+        const isJunction = (ch === '.' && !answeredJunctions.has(key));
+
+        if (!isJunction) {
+            questionFunc.textContent = '🧭 沿着小路前进…';
+            questionHint.textContent = '移动到下一个岔路口(❓)才会出现题目';
+            quizStep.textContent = `探索中`;
+            optionsList.innerHTML = '';
+            quizFooter.textContent = '使用方向键移动小人，走到岔路口自动出题；走到终点🏁即可通关';
+            return;
+        }
+
+        const junctionIndex = junctions.findIndex(j => j.r === playerPos.r && j.c === playerPos.c);
+        if (junctionIndex === -1) {
+            questionFunc.textContent = '🌿 继续前进...';
+            optionsList.innerHTML = '';
+            return;
+        }
+
+        const q = junctionQuestions[junctionIndex];
+        currentJunction = { r: playerPos.r, c: playerPos.c, q: q };
+
+        questionFunc.textContent = `f'(x) = ${q.deriv}`;
+        questionHint.textContent = '选择正确的原函数，才能通过这个岔路口';
+        quizStep.textContent = `岔路口答题`;
+
+        optionsList.innerHTML = '';
+        const allOpts = [q.correct, ...q.distractors];
+        const shuffled = shuffleArray(allOpts);
+        shuffled.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.textContent = `F(x) = ${opt}`;
+            btn.addEventListener('click', () => handleAnswer(opt, btn, q));
+            optionsList.appendChild(btn);
+        });
+
+        quizFooter.textContent = '答对后小人才能离开岔路口，答错会进入死胡同并弹出解析';
+    }
+
+    // ============================================================
+    // 6. 移动控制
+    // ============================================================
+    function movePlayer(dr, dc) {
+        if (gameLocked) return;
+        if (isLevelCompleted()) return;
+        if (allLevelsFinished) return;
+
+        const key = playerPos.r + ',' + playerPos.c;
+        const ch = currentMap[playerPos.r][playerPos.c];
+        if (ch === '.' && !answeredJunctions.has(key)) {
+            quizFooter.textContent = '⚠️ 必须先答对岔路口的题目才能继续前进！';
+            return;
+        }
+
+        const nr = playerPos.r + dr;
+        const nc = playerPos.c + dc;
+        if (!isWalkable(nr, nc)) {
+            quizFooter.textContent = '🧱 前面是墙壁，无法通过';
+            return;
+        }
+
+        playerPos = { r: nr, c: nc };
+        visitedCells.add(nr + ',' + nc);
+
+        // 到达终点
+        if (nr === exitPos.r && nc === exitPos.c) {
+            levelCompleted[currentLevelIndex] = true;
+            updateLevelSelector();
+            updateNextButton();
+
+            // 检查三关是否全部完成
+            if (levelCompleted.every(Boolean)) {
+                allLevelsFinished = true;
+                setTimeout(showFinalCelebration, 500);
+            }
+        }
+
+        renderMaze();
+        renderQuizPanel();
+    }
+
+    // ============================================================
+    // 7. 答题处理
+    // ============================================================
+    function handleAnswer(selected, btnElement, question) {
+        if (gameLocked) return;
+        if (isLevelCompleted()) return;
+        if (allLevelsFinished) return;
+
+        const isCorrect = (selected === question.correct);
+
+        if (isCorrect) {
+            gameLocked = true;
+            optionsList.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+
+            const key = playerPos.r + ',' + playerPos.c;
+            answeredJunctions.add(key);
+
+            setTimeout(() => {
+                gameLocked = false;
+                hideExplanation();
+                quizFooter.textContent = '✅ 回答正确！请移动小人继续前进';
+                renderMaze();
+                renderQuizPanel();
+            }, 300);
+
+        } else {
+            btnElement.classList.add('wrong-selected');
+            btnElement.disabled = true;
+            showExplanation(question.explanation);
+            quizFooter.textContent = '❌ 走错路了！看看解析，再选一次吧';
+        }
+    }
+
+    // ============================================================
+    // 8. 关卡初始化
+    // ============================================================
+    function isLevelCompleted() {
+        return (playerPos.r === exitPos.r && playerPos.c === exitPos.c && levelCompleted[currentLevelIndex]);
+    }
+
+    function collectJunctionsBFS(map2D, startPos) {
+        const rows = map2D.length;
+        const cols = map2D[0].length;
+        const visited = new Set();
+        const queue = [startPos];
+        const result = [];
+        
+        while (queue.length > 0) {
+            const { r, c } = queue.shift();
+            const key = r + ',' + c;
+            if (visited.has(key)) continue;
+            visited.add(key);
+            
+            const ch = map2D[r][c];
+            if (ch === '.') {
+                result.push({ r, c });
+            }
+            
+            const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            for (const [dr, dc] of dirs) {
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                    const nch = map2D[nr][nc];
+                    if ((nch === '.' || nch === 'S' || nch === 'E') && !visited.has(nr + ',' + nc)) {
+                        queue.push({ r: nr, c: nc });
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    function loadLevel(levelIndex) {
+        currentLevelIndex = levelIndex;
+        const level = levels[levelIndex];
+        currentMap = level.map.map(line => line.split(''));
+
+        let start = null, exit = null;
+        for (let r = 0; r < currentMap.length; r++) {
+            for (let c = 0; c < currentMap[r].length; c++) {
+                if (currentMap[r][c] === 'S') start = { r, c };
+                if (currentMap[r][c] === 'E') exit = { r, c };
+            }
+        }
+        playerPos = { r: start.r, c: start.c };
+        exitPos = { r: exit.r, c: exit.c };
+
+        visitedCells.clear();
+        visitedCells.add(start.r + ',' + start.c);
+        answeredJunctions.clear();
+        gameLocked = false;
+        hideExplanation();
+
+        junctions = collectJunctionsBFS(currentMap, start);
+        junctionQuestions = junctions.map((j, idx) => {
+            return level.questions[idx % level.questions.length];
+        });
+
+        levelBadge.innerHTML = `🌲 关卡 ${levelIndex + 1} · ${level.name}`;
+        updateLevelSelector();
+        updateNextButton();
+
+        renderMaze();
+        renderQuizPanel();
+
+        quizFooter.textContent = '使用方向键移动小人，走到岔路口❓自动出题，走到终点🏁即可通关';
+    }
+
+    // ============================================================
+    // 9. 最终通关庆祝画面
+    // ============================================================
+    function showFinalCelebration() {
+        finalOverlay.classList.add('show');
+        // 隐藏主界面按钮（视觉上被覆盖）
+        // 启动持续礼炮
+        startFireworks();
+    }
+
+    let fireworksInterval = null;
+
+    function startFireworks() {
+        if (fireworksInterval) clearInterval(fireworksInterval);
+
+        // 立即来一波
+        spawnFireworkBurst();
+        spawnFireworkBurst();
+
+        // 持续放礼炮
+        fireworksInterval = setInterval(() => {
+            spawnFireworkBurst();
+            if (Math.random() > 0.5) spawnFireworkBurst();
+        }, 600);
+    }
+
+    function stopFireworks() {
+        if (fireworksInterval) {
+            clearInterval(fireworksInterval);
+            fireworksInterval = null;
+        }
+        fireworksLayer.innerHTML = '';
+    }
+
+    function spawnFireworkBurst() {
+        const colors = ['#ffd966', '#ff6b6b', '#4ecdc4', '#ffe66d', '#a8e6cf', '#ff8b94', '#c7a1ff', '#ffb347'];
+        const cx = 10 + Math.random() * 80;  // 10% ~ 90% 宽度
+        const cy = 5 + Math.random() * 50;   // 5% ~ 55% 高度
+        const particleCount = 18 + Math.floor(Math.random() * 14);
+        const baseColor = colors[Math.floor(Math.random() * colors.length)];
+
+        for (let i = 0; i < particleCount; i++) {
+            const p = document.createElement('div');
+            p.className = 'firework-particle';
+            const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.4;
+            const distance = 60 + Math.random() * 140;
+            const dx = Math.cos(angle) * distance;
+            const dy = Math.sin(angle) * distance;
+            p.style.left = cx + '%';
+            p.style.top = cy + '%';
+            p.style.setProperty('--dx', dx + 'px');
+            p.style.setProperty('--dy', dy + 'px');
+            // 颜色微调
+            const col = i % 3 === 0 ? '#ffffff' : baseColor;
+            p.style.background = col;
+            p.style.boxShadow = `0 0 10px ${col}, 0 0 20px ${col}`;
+            // 尺寸随机
+            const sz = 4 + Math.random() * 8;
+            p.style.width = sz + 'px';
+            p.style.height = sz + 'px';
+            // 动画时长略微变化
+            p.style.animationDuration = (1.2 + Math.random() * 0.8) + 's';
+
+            fireworksLayer.appendChild(p);
+
+            // 动画结束后移除
+            p.addEventListener('animationend', () => p.remove());
+        }
+
+        // 额外加一点星星闪烁感（少量)
+        if (Math.random() > 0.7) {
+            const star = document.createElement('div');
+            star.textContent = '✨';
+            star.style.position = 'absolute';
+            star.style.left = (5 + Math.random() * 90) + '%';
+            star.style.top = (5 + Math.random() * 60) + '%';
+            star.style.fontSize = (12 + Math.random() * 18) + 'px';
+            star.style.opacity = '0.9';
+            star.style.pointerEvents = 'none';
+            star.style.animation = 'burst 1.4s ease-out forwards';
+            star.style.setProperty('--dx', '0px');
+            star.style.setProperty('--dy', '0px');
+            fireworksLayer.appendChild(star);
+            star.addEventListener('animationend', () => star.remove());
+        }
+    }
+
+    // 重置所有游戏 —— 再玩一次
+    function restartAllGame() {
+        stopFireworks();
+        finalOverlay.classList.remove('show');
+
+        // 重置所有状态
+        levelCompleted = [false, false, false];
+        allLevelsFinished = false;
+        currentLevelIndex = 0;
+        updateLevelSelector();
+        loadLevel(0);
+
+        levelBadge.innerHTML = `🌲 关卡 1 · 林间小径`;
+    }
+
+    // ============================================================
+    // 10. 初始化
+    // ============================================================
+    function initGame() {
+        levelSelector.innerHTML = '';
+        for (let i = 0; i < levels.length; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'level-dot';
+            dot.textContent = i + 1;
+            dot.addEventListener('click', () => {
+                if (gameLocked) return;
+                if (allLevelsFinished) return;
+                loadLevel(i);
+            });
+            levelSelector.appendChild(dot);
+        }
+
+        upBtn.addEventListener('click', () => movePlayer(-1, 0));
+        downBtn.addEventListener('click', () => movePlayer(1, 0));
+        leftBtn.addEventListener('click', () => movePlayer(0, -1));
+        rightBtn.addEventListener('click', () => movePlayer(0, 1));
+
+        document.addEventListener('keydown', (e) => {
+            if (gameLocked) return;
+            if (allLevelsFinished) return;
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                if (e.key === 'ArrowUp') movePlayer(-1, 0);
+                else if (e.key === 'ArrowDown') movePlayer(1, 0);
+                else if (e.key === 'ArrowLeft') movePlayer(0, -1);
+                else if (e.key === 'ArrowRight') movePlayer(0, 1);
+            }
+        });
+
+        closeExplanationBtn.addEventListener('click', hideExplanation);
+        resetLevelBtn.addEventListener('click', () => loadLevel(currentLevelIndex));
+        nextLevelBtn.addEventListener('click', () => {
+            if (currentLevelIndex < levels.length - 1) loadLevel(currentLevelIndex + 1);
+        });
+
+        finalRestartBtn.addEventListener('click', restartAllGame);
+
+        loadLevel(0);
+    }
+
+    window.addEventListener('DOMContentLoaded', initGame);
+})();
+</script>
+</body>
+</html>
